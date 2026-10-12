@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, open } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import AGENTS_DATA, { getAgentByFlag } from '../agents.js'
@@ -467,11 +467,13 @@ export function computeFileHashes(fileContents) {
  */
 export async function readSkillFiles(skillDir) {
   const fileContents = {}
+  let truncated = false
   try {
     const entries = await readdir(skillDir, {
       withFileTypes: true,
       recursive: true,
     })
+    let totalBytes = 0
     for (const entry of entries) {
       if (!entry.isFile()) continue
       const fullPath = join(entry.parentPath ?? skillDir, entry.name)
@@ -481,12 +483,83 @@ export async function readSkillFiles(skillDir) {
       if (!relPath || relPath.startsWith('..')) continue
       if (isIgnoredSkillPath(relPath)) continue
       try {
-        fileContents[relPath] = await readFile(fullPath, 'utf-8')
+        // Size is enforced by the read itself, so an oversized or hostile file
+        // is never held in memory. A skill arrives from a URL, so its size is
+        // chosen by whoever published it.
+        const read = await readFileBounded(fullPath, MAX_SKILL_FILE_BYTES)
+        if (!read) {
+          truncated = true
+          continue
+        }
+        if (totalBytes + read.bytes > MAX_SKILL_TOTAL_BYTES) {
+          truncated = true
+          break
+        }
+        totalBytes += read.bytes
+        fileContents[relPath] = read.content
       } catch {}
     }
   } catch {}
+  if (truncated) {
+    Object.defineProperty(fileContents, TRUNCATED, {
+      value: true,
+      enumerable: false,
+    })
+  }
   return fileContents
 }
+
+// Byte budgets for reading a skill directory. A skill arrives from a URL, so
+// its size is chosen by whoever published it, and every byte here is held in
+// memory before the security scan runs. Both limits are far above any real
+// skill (the largest legitimate one in the ecosystem is a few hundred KB).
+export const MAX_SKILL_FILE_BYTES = 1_000_000
+export const MAX_SKILL_TOTAL_BYTES = 8_000_000
+
+/**
+ * Read a file, refusing anything larger than `maxBytes`.
+ *
+ * The size is enforced by asking for at most `maxBytes + 1` and checking what
+ * came back, rather than `stat`-ing first and then reading. Measuring and
+ * reading separately is a TOCTOU race (CodeQL `js/file-system-race`): the file
+ * can be replaced in between, so the byte count that was checked is not
+ * necessarily the byte count that gets read. Reading into a buffer sized by the
+ * limit bounds memory no matter what the file is on disk, and one byte of
+ * headroom is enough to know it was too big.
+ *
+ * @returns {Promise<{content: string, bytes: number} | null>} `null` when the
+ * file is over the limit or could not be read.
+ */
+export async function readFileBounded(fullPath, maxBytes) {
+  let handle
+  try {
+    handle = await open(fullPath, 'r')
+    const buffer = Buffer.allocUnsafe(maxBytes + 1)
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes + 1, 0)
+    if (bytesRead > maxBytes) return null
+    return {
+      content: buffer.toString('utf-8', 0, bytesRead),
+      bytes: bytesRead,
+    }
+  } catch {
+    return null
+  } finally {
+    await handle?.close().catch(() => {})
+  }
+}
+
+// Files skipped by the budget above are unread rather than scanned, which is a
+// hole in the security check: the scanner would otherwise see a directory with
+// nothing in it and call it clean. The count is attached to the returned map as
+// a **non-enumerable** property so the existing callers are unaffected —
+// `Object.keys()` drives the installer's file list, and `JSON.stringify` is
+// used for hashing, so an ordinary key here would install a junk file and
+// change every content hash. `scanSkill` reads it through
+// `wasTruncated`.
+export function wasTruncated(fileContents) {
+  return fileContents?.[TRUNCATED] ?? false
+}
+export const TRUNCATED = Symbol('rolecraft.truncated')
 
 function isIgnoredSkillPath(relPath) {
   return relPath
