@@ -1,5 +1,6 @@
 import { readFile, readdir, stat, rm } from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { Writable } from 'node:stream'
 import { join, dirname, basename } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -419,6 +420,7 @@ function parseNpmRef(source) {
 // package name is chosen by whoever is being resolved, so the response is not
 // trusted to be bounded.
 const MAX_JSON_BYTES = 2_000_000
+const MAX_NPM_TARBALL_BYTES = 50 * 1024 * 1024
 
 function fetchJson(url) {
   const parsed = new URL(url)
@@ -448,6 +450,8 @@ function fetchJson(url) {
           bytes += chunk.length
           if (bytes > MAX_JSON_BYTES) {
             aborted = true
+            res.destroy?.()
+            req.destroy?.()
             reject(
               new UserError(
                 `npm registry response for ${cleanUrl} exceeded ${MAX_JSON_BYTES} bytes.`,
@@ -544,9 +548,37 @@ async function downloadFile(url, dest, pkgLabel) {
     })
   }
 
+  const contentLength = Number(response.headers?.get('content-length'))
+  if (contentLength > MAX_NPM_TARBALL_BYTES) {
+    response.body?.cancel().catch(() => {})
+    throw new UserError(`npm tarball exceeds ${MAX_NPM_TARBALL_BYTES} bytes.`, {
+      suggestion:
+        'The package download was stopped before extraction. Retry, or install from a git source instead.',
+      code: 'NPM_TARBALL_TOO_LARGE',
+    })
+  }
+
+  let bytes = 0
+  const limit = new TransformStream({
+    transform(chunk, controller) {
+      bytes += chunk.byteLength
+      if (bytes > MAX_NPM_TARBALL_BYTES) {
+        throw new UserError(
+          `npm tarball exceeds ${MAX_NPM_TARBALL_BYTES} bytes.`,
+          {
+            suggestion:
+              'The package download was stopped before extraction. Retry, or install from a git source instead.',
+            code: 'NPM_TARBALL_TOO_LARGE',
+          },
+        )
+      }
+      controller.enqueue(chunk)
+    },
+  })
+
   const fileStream = createWriteStream(dest)
   const writable = Writable.toWeb(fileStream)
-  await response.body.pipeTo(writable)
+  await response.body.pipeThrough(limit).pipeTo(writable)
 }
 
 /**
@@ -617,6 +649,27 @@ async function resolveNpmInternal(source) {
 
   try {
     await downloadFile(tarballUrl, tarballPath, `${pkgName}@${ver}`)
+
+    const expectedIntegrity = pkgVersionData.dist?.integrity
+      ?.split(/\s+/)
+      .find((value) => value.startsWith('sha512-'))
+    if (expectedIntegrity) {
+      const actualIntegrity =
+        'sha512-' +
+        createHash('sha512')
+          .update(await readFile(tarballPath))
+          .digest('base64')
+      if (actualIntegrity !== expectedIntegrity) {
+        throw new UserError(
+          'The downloaded tarball does not match the integrity published by the registry.',
+          {
+            suggestion:
+              'The package may have been tampered with. Retry, or install from a git source instead.',
+            code: 'NPM_TARBALL_INTEGRITY_MISMATCH',
+          },
+        )
+      }
+    }
 
     // Validate tarball entries before extraction. Two separate checks:
     //
