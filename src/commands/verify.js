@@ -1,4 +1,5 @@
 import { apiVerify } from '../api/verify.js'
+import { sanitizeForLog } from '../utils/tui.js'
 
 export async function verifyCommand(frozen) {
   const result = await apiVerify(process.cwd(), frozen)
@@ -13,21 +14,21 @@ export async function verifyCommand(frozen) {
   )
 
   for (const v of result.verified) {
-    console.log(`   ✅ ${v.slug} (hash match)`)
+    console.log(`   ✅ ${sanitizeForLog(v.slug)} (hash match)`)
   }
   for (const f of result.failed) {
     if (f.reason === 'directory not found') {
-      console.error(`   ❌ ${f.slug}: skill directory not found`)
+      console.error(`   ❌ ${sanitizeForLog(f.slug)}: skill directory not found`)
     } else if (f.reason === 'missing source in lockfile') {
-      console.error(`   ❌ ${f.slug}: missing source in lockfile`)
+      console.error(`   ❌ ${sanitizeForLog(f.slug)}: missing source in lockfile`)
     } else if (f.dirs) {
       for (const d of f.dirs) {
         const changes =
-          d.changes?.length > 0 ? ` (${d.changes.join(', ')})` : ''
-        console.error(`   ❌ ${f.slug}: hash mismatch in ${d.dir}${changes}`)
+          d.changes?.length > 0 ? ` (${sanitizeForLog(d.changes.join(', '))})` : ''
+        console.error(`   ❌ ${sanitizeForLog(f.slug)}: hash mismatch in ${sanitizeForLog(d.dir)}${sanitizeForLog(changes)}`)
       }
     } else {
-      console.error(`   ❌ ${f.slug}: ${f.reason}`)
+      console.error(`   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`)
     }
   }
 

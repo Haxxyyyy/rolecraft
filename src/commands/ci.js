@@ -1,4 +1,5 @@
 import { apiCi } from '../api/ci.js'
+import { sanitizeForLog } from '../utils/tui.js'
 
 export async function ciCommand() {
   const result = await apiCi(process.cwd())
@@ -15,10 +16,10 @@ export async function ciCommand() {
       `\n🔒 Installing ${result.skillCount} skill(s) from lockfile...\n`,
     )
     for (const inst of result.installed) {
-      console.log(`   ✅ ${inst.slug} installed`)
+      console.log(`   ✅ ${sanitizeForLog(inst.slug)} installed`)
     }
     for (const f of result.failed) {
-      console.error(`   ❌ ${f.slug}: ${f.reason}`)
+      console.error(`   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`)
     }
     console.log()
   }
@@ -31,11 +32,11 @@ export async function ciCommand() {
     }
     for (const inst of result.mcpInstalled) {
       console.log(
-        `   ✅ ${inst.name} installed to ${inst.agents.length} agent(s)`,
+        `   ✅ ${sanitizeForLog(inst.name)} installed to ${inst.agents.length} agent(s)`,
       )
     }
     for (const f of result.mcpFailed) {
-      console.error(`   ❌ ${f.name}: ${f.reason}`)
+      console.error(`   ❌ ${sanitizeForLog(f.name)}: ${sanitizeForLog(f.reason)}`)
     }
     console.log()
   }
