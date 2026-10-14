@@ -1,6 +1,6 @@
 import { describe, it, before, after, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, existsSync } from 'node:fs'
+import { mkdtempSync, existsSync, statSync } from 'node:fs'
 import { mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -8,6 +8,11 @@ import { createHash } from 'node:crypto'
 import { format } from 'node:util'
 
 let tempDir, profileModule, origHome
+
+function assertPrivateFile(path) {
+  if (process.platform === 'win32') return
+  assert.equal(statSync(path).mode & 0o777, 0o600)
+}
 
 const VALID_PROFILE = {
   name: 'test-profile',
@@ -227,6 +232,7 @@ describe('profile utils', () => {
   describe('writeProfile and readProfile', () => {
     it('writes and reads a profile', async () => {
       const written = await profileModule.writeProfile(VALID_PROFILE)
+      assertPrivateFile(profileModule.profilePath('test-profile'))
       assert.equal(written.name, 'test-profile')
       assert.equal(written.version, 1)
       assert.ok(written.createdAt)
@@ -781,6 +787,7 @@ describe('profile apply', () => {
       assert.equal(result.length, 1)
       assert.equal(result[0].scope, 'global')
       assert.ok(result[0].path.includes('.bak'))
+      assertPrivateFile(result[0].path)
     })
 
     it('returns null when no config exists', async () => {
@@ -802,6 +809,33 @@ describe('profile apply', () => {
 
       const written = JSON.parse(await readFile(result[0].path, 'utf-8'))
       assert.equal(written.model, 'gpt-4o')
+    })
+
+    it('writes the agent config owner-only so a captured MCP key is not exposed', async () => {
+      // An agent config carries MCP server definitions, and those carry `env`
+      // blocks with real API keys. Gating the `mcp` key stops an untrusted
+      // profile from *introducing* one; writing 0600 stops an existing one from
+      // being read by every local user. Both halves are needed.
+      const configData = {
+        global: {
+          mcp: {
+            github: {
+              type: 'local',
+              command: ['npx', '-y', '@mcp/github'],
+              env: { GITHUB_TOKEN: 'ghp_test_token' },
+            },
+          },
+        },
+      }
+
+      const result = await applyModule.applyAgentConfig('agents', configData)
+
+      const target = result[0].path
+      if (process.platform !== 'win32') {
+        assert.equal(statSync(target).mode & 0o777, 0o600)
+      }
+      // Sanity: the key really is in the file, so the mode is what protects it.
+      assert.match(await readFile(target, 'utf-8'), /ghp_test_token/)
     })
 
     it('drops permission and plugin from a profile config', async () => {
