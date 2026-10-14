@@ -54,7 +54,7 @@ export const ICONS = {
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
 
-const LOG_CONTROL_CHARS = /[\r\n\x00-\x1f\x7f]/g
+const LOG_CONTROL_CHARS = /[\r\n\x00-\x1f\x7f]+/g
 
 export function sanitizeForLog(value) {
   return String(value).replace(LOG_CONTROL_CHARS, ' ').slice(0, 200)
