@@ -5,6 +5,7 @@ import {
   renderTable,
   setPromptUser,
   stripAnsi,
+  sanitizeForLog,
   theme,
   truncate,
   hasColor,
@@ -35,6 +36,16 @@ describe('tui utils', () => {
 
     it('appends ellipsis to long strings', () => {
       assert.equal(truncate('abcdef', 5), 'abcd…')
+    })
+  })
+
+  describe('sanitizeForLog', () => {
+    it('collapses control characters and truncates long values', () => {
+      assert.equal(
+        sanitizeForLog('blocked\n\u001b[32m✅\u001b[0m'),
+        'blocked [32m✅ [0m',
+      )
+      assert.equal(sanitizeForLog('x'.repeat(205)).length, 200)
     })
   })
 

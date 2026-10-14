@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -204,6 +204,40 @@ describe('verify command', () => {
     await verifyModule.verifyCommand()
     restore()
     assert.ok(errors.some((l) => l.includes('missing.txt')))
+  })
+
+  it('sanitizes attacker-controlled slugs before writing stderr', async () => {
+    const lockPath = join(tempDir, '.agents', '.skill-lock.json')
+    const lock = JSON.parse(readFileSync(lockPath, 'utf-8'))
+    const slug = 'blocked\n\u001b[32m✅ forged\u001b[0m'
+    lock.skills[slug] = {
+      slug,
+      contentSha: 'missing',
+      source: 'local',
+      sourceType: 'local',
+      agents: ['project'],
+    }
+    writeFileSync(lockPath, JSON.stringify(lock))
+
+    const { logs: errors, restore } = capture('error')
+    try {
+      await verifyModule.verifyCommand()
+    } finally {
+      restore()
+    }
+
+    const output = errors.join('\n')
+    // No escape byte may survive into stderr. Built with `String.fromCharCode`
+    // for the same reason as the sanitizer itself: a literal control character
+    // in a pattern trips `noControlCharactersInRegex`.
+    assert.doesNotMatch(output, new RegExp(String.fromCharCode(27), 'g'))
+    // `\n` and the first `\u001b` are adjacent, so the `+` in the control-character
+    // run collapses them into a single space; the second `\u001b` stands alone
+    // and becomes a space of its own.
+    assert.ok(
+      output.includes('blocked [32m✅ forged [0m: skill directory not found'),
+    )
+    assert.equal(output.split('forged').length - 1, 1)
   })
 
   it('reports missing source in frozen mode', async () => {

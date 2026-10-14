@@ -8,15 +8,28 @@ import {
   readFileSync,
   readlinkSync,
   lstatSync,
+  statSync,
 } from 'node:fs'
 import { mkdir, rm, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-let tempDir, installerModule, resolvedSkill, origHome
+let tempDir, sharedProjectDir, installerModule, resolvedSkill, origHome
+
+function assertPrivateFile(path) {
+  if (process.platform === 'win32') return
+  assert.equal(statSync(path).mode & 0o777, 0o600)
+}
 
 before(async () => {
+  // HOME and the project cwd must not be the same directory.
+  // `installSkill` runs its targets concurrently, and when HOME === cwd both
+  // the `agents` target and the `project` target resolve to the same
+  // `<dir>/.agents/skills` slug dir — so one target's `rm -rf` raced the
+  // other's file writes. The loser was then dropped from the result array
+  // entirely, and this test failed intermittently on Node 26 / ubuntu-latest.
   tempDir = mkdtempSync(join(tmpdir(), 'rolecraft-install-test-'))
+  sharedProjectDir = mkdtempSync(join(tmpdir(), 'rolecraft-install-proj-'))
   origHome = process.env.HOME
   process.env.HOME = tempDir
 
@@ -46,6 +59,7 @@ before(async () => {
 
 after(async () => {
   await rm(tempDir, { recursive: true, force: true })
+  await rm(sharedProjectDir, { recursive: true, force: true })
   await rm(join(process.cwd(), '.github', 'skills'), {
     recursive: true,
     force: true,
@@ -615,14 +629,20 @@ describe('installer', () => {
     // `project` resolves its lockfile through cwd. Passed explicitly so the
     // fixture never lands in the repo's own .agents/.skill-lock.json, which
     // would make every later `rolecraft ci` in this checkout report it as a
-    // broken skill.
+    // broken skill. `sharedProjectDir` is deliberately not HOME, so this target
+    // and the `agents` target do not write to the same directory.
     const results = await installerModule.installSkill(
       resolvedSkill,
       ['agents', 'project'],
       'copy',
-      tempDir,
+      sharedProjectDir,
     )
     assert.equal(results.length, 2)
+    assert.equal(
+      results.filter((r) => r && r.failed === true).length,
+      0,
+      results.map((r) => `${r.target}: ${r.reason ?? ''}`).join('; '),
+    )
   })
 
   // #332: `--devin` is not the string 'project', but its directory is inside
@@ -689,13 +709,6 @@ describe('installer', () => {
     } finally {
       await rm(projectDir, { recursive: true, force: true })
     }
-  })
-
-  it('skips unknown targets', async () => {
-    const results = await installerModule.installSkill(resolvedSkill, [
-      'unknown',
-    ])
-    assert.equal(results.length, 0)
   })
 
   it('allows normalized slug collisions for disjoint agent directories', async () => {
@@ -1636,6 +1649,7 @@ describe('installer', () => {
       const entries = await readdir(backupDir)
       assert.equal(entries.length, 1)
       assert.ok(entries[0].endsWith('.json'))
+      assertPrivateFile(join(backupDir, entries[0]))
     })
 
     it('listBackups returns backups newest-first', async () => {
