@@ -9,6 +9,11 @@ import { format } from 'node:util'
 
 let tempDir, profileModule, origHome
 
+function assertPrivateFile(path) {
+  if (process.platform === 'win32') return
+  assert.equal(statSync(path).mode & 0o777, 0o600)
+}
+
 const VALID_PROFILE = {
   name: 'test-profile',
   version: 1,
@@ -227,10 +232,7 @@ describe('profile utils', () => {
   describe('writeProfile and readProfile', () => {
     it('writes and reads a profile', async () => {
       const written = await profileModule.writeProfile(VALID_PROFILE)
-      assert.equal(
-        statSync(profileModule.profilePath('test-profile')).mode & 0o777,
-        0o600,
-      )
+      assertPrivateFile(profileModule.profilePath('test-profile'))
       assert.equal(written.name, 'test-profile')
       assert.equal(written.version, 1)
       assert.ok(written.createdAt)
@@ -785,7 +787,7 @@ describe('profile apply', () => {
       assert.equal(result.length, 1)
       assert.equal(result[0].scope, 'global')
       assert.ok(result[0].path.includes('.bak'))
-      assert.equal(statSync(result[0].path).mode & 0o777, 0o600)
+      assertPrivateFile(result[0].path)
     })
 
     it('returns null when no config exists', async () => {
