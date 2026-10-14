@@ -331,12 +331,29 @@ export async function installSkill(
     targets.map((target) => installToTarget(target)),
   )
 
+  // One target failing does not abandon the others, so the installs stay
+  // concurrent. But a rejection used to be dropped here and the caller was
+  // handed a short array with no error: `rolecraft install a b` reported
+  // success for `a` while `b` had thrown, and nothing said so. Surface it.
   const results = []
 
-  for (const outcome of outcomes) {
-    if (outcome.status === 'fulfilled' && outcome.value !== null) {
-      results.push(outcome.value)
+  for (const [index, outcome] of outcomes.entries()) {
+    const target = targets[index]
+
+    if (outcome.status === 'rejected') {
+      const reason = outcome.reason?.message ?? String(outcome.reason)
+      // Keep the entry so a caller that only reads `.length` still sees that
+      // this target did not install, but mark it failed so no caller reports
+      // it as a success.
+      results.push({
+        target,
+        failed: true,
+        reason,
+      })
+      continue
     }
+
+    if (outcome.value !== null) results.push(outcome.value)
   }
 
   return results
