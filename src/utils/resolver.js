@@ -551,14 +551,11 @@ async function downloadFile(url, dest, pkgLabel) {
   const contentLength = Number(response.headers?.get('content-length'))
   if (contentLength > MAX_NPM_TARBALL_BYTES) {
     response.body?.cancel().catch(() => {})
-    throw new UserError(
-      'npm tarball exceeds ' + MAX_NPM_TARBALL_BYTES + ' bytes.',
-      {
-        suggestion:
-          'The package download was stopped before extraction. Retry, or install from a git source instead.',
-        code: 'NPM_TARBALL_TOO_LARGE',
-      },
-    )
+    throw new UserError(`npm tarball exceeds ${MAX_NPM_TARBALL_BYTES} bytes.`, {
+      suggestion:
+        'The package download was stopped before extraction. Retry, or install from a git source instead.',
+      code: 'NPM_TARBALL_TOO_LARGE',
+    })
   }
 
   let bytes = 0
@@ -567,7 +564,7 @@ async function downloadFile(url, dest, pkgLabel) {
       bytes += chunk.byteLength
       if (bytes > MAX_NPM_TARBALL_BYTES) {
         throw new UserError(
-          'npm tarball exceeds ' + MAX_NPM_TARBALL_BYTES + ' bytes.',
+          `npm tarball exceeds ${MAX_NPM_TARBALL_BYTES} bytes.`,
           {
             suggestion:
               'The package download was stopped before extraction. Retry, or install from a git source instead.',

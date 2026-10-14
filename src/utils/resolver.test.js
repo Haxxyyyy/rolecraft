@@ -777,8 +777,7 @@ Content
     it('verifies npm tarball integrity before extraction', async () => {
       await freshImport()
       const bytes = Buffer.from('fake-tarball')
-      const integrity =
-        'sha512-' + createHash('sha512').update(bytes).digest('base64')
+      const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
       mockHttps(resolverModule, integrity)
       let extracted = false
       resolverModule.setSpawnSync((cmd, args) => {
@@ -786,7 +785,10 @@ Content
           extracted = true
           const packageDir = join(args[3], 'package')
           mkdirSync(packageDir, { recursive: true })
-          writeFileSync(join(packageDir, 'SKILL.md'), '---\nname: npm-skill\n---\nContent')
+          writeFileSync(
+            join(packageDir, 'SKILL.md'),
+            '---\nname: npm-skill\n---\nContent',
+          )
         }
         return { status: 0, stdout: '', stderr: '' }
       })
@@ -993,7 +995,10 @@ Content
         () => resolverModule.resolveSource('npm:test-pkg'),
         (error) => {
           assert.equal(error.userCode, 'NPM_FETCH_FAILED')
-          assert.match(error.detail, /NPM_FETCH_TOO_LARGE|exceeded 2000000 bytes/)
+          assert.match(
+            error.detail,
+            /NPM_FETCH_TOO_LARGE|exceeded 2000000 bytes/,
+          )
           return true
         },
       )
@@ -1034,7 +1039,9 @@ Content
       globalThis.fetch = async () => ({
         ok: true,
         status: 200,
-        headers: new Headers({ 'content-length': String(50 * 1024 * 1024 + 1) }),
+        headers: new Headers({
+          'content-length': String(50 * 1024 * 1024 + 1),
+        }),
         body: Readable.toWeb(Readable.from([Buffer.from('unused')])),
       })
       try {
