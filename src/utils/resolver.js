@@ -548,7 +548,7 @@ async function downloadFile(url, dest, pkgLabel) {
     })
   }
 
-  const contentLength = Number(response.headers.get('content-length'))
+  const contentLength = Number(response.headers?.get('content-length'))
   if (contentLength > MAX_NPM_TARBALL_BYTES) {
     response.body?.cancel().catch(() => {})
     throw new UserError(
