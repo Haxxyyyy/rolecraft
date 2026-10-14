@@ -54,6 +54,20 @@ export const ICONS = {
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
 
+// Built with `String.fromCharCode` rather than a literal, for the same reason
+// as `ANSI_PATTERN` above: the control characters this pattern strips cannot
+// appear as literals without tripping the `noControlCharactersInRegex` lint.
+// `\x00-\x1f` covers ESC, so ANSI sequences lose their escape byte and cannot
+// repaint the terminal.
+const LOG_CONTROL_CHARS = new RegExp(
+  `[\\r\\n${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]+`,
+  'g',
+)
+
+export function sanitizeForLog(value) {
+  return String(value).replace(LOG_CONTROL_CHARS, ' ').slice(0, 200)
+}
+
 export function stripAnsi(s) {
   return String(s).replace(ANSI_PATTERN, '')
 }

@@ -1,7 +1,12 @@
 import { apiInstallSkills } from '../api/install.js'
 import agents from '../agents.js'
 import { createProgressBar } from '../utils/spinner.js'
-import { ICONS, askQuestion, renderTable } from '../utils/tui.js'
+import {
+  ICONS,
+  askQuestion,
+  renderTable,
+  sanitizeForLog,
+} from '../utils/tui.js'
 
 export { setCreateInterface } from '../utils/tui.js'
 
@@ -38,8 +43,8 @@ async function askScope() {
 async function selectSkillsInteractive(skills) {
   const choices = skills.map((s, i) => ({
     index: i,
-    label: s.name,
-    description: s.description || `slug: ${s.slug}`,
+    label: sanitizeForLog(s.name),
+    description: sanitizeForLog(s.description || `slug: ${s.slug}`),
     selected: false,
   }))
 
@@ -103,10 +108,10 @@ export async function installCommand(source, options) {
     bar.succeed(`Found ${skills.length} skill(s)`)
     console.log()
     const rows = skills.map((s) => [
-      s.slug,
-      s.name,
-      s.description || '-',
-      s.files.join(', '),
+      sanitizeForLog(s.slug),
+      sanitizeForLog(s.name),
+      sanitizeForLog(s.description || '-'),
+      sanitizeForLog(s.files.join(', ')),
     ])
     for (const line of renderTable(
       ['SLUG', 'NAME', 'DESCRIPTION', 'FILES'],
@@ -152,11 +157,13 @@ export async function installCommand(source, options) {
     const mode = options.symlink ? 'symlink' : 'copy'
     console.log(`\n[dry-run] Would install ${result.skills.length} skill(s):\n`)
     for (const skill of result.skills) {
-      console.log(`   Skill:     ${skill.name} (${skill.slug})`)
-      console.log(`   Source:    ${source}`)
+      console.log(
+        `   Skill:     ${sanitizeForLog(skill.name)} (${sanitizeForLog(skill.slug)})`,
+      )
+      console.log(`   Source:    ${sanitizeForLog(source)}`)
       console.log(`   Mode:      ${mode}`)
-      console.log(`   Files:     ${skill.files.join(', ')}`)
-      console.log(`   Targets:   ${skill.targets.join(', ')}`)
+      console.log(`   Files:     ${sanitizeForLog(skill.files.join(', '))}`)
+      console.log(`   Targets:   ${sanitizeForLog(skill.targets.join(', '))}`)
       console.log()
     }
     return
@@ -183,8 +190,8 @@ export async function installCommand(source, options) {
   }
 
   const rows = result.results.map((skillResult) => [
-    skillResult.name || skillResult.slug,
-    skillResult.install.map((r) => r.label).join(', '),
+    sanitizeForLog(skillResult.name || skillResult.slug),
+    sanitizeForLog(skillResult.install.map((r) => r.label).join(', ')),
     `${ICONS.ok} installed`,
   ])
   for (const line of renderTable(['SKILL', 'TARGETS', 'STATUS'], rows))
@@ -193,20 +200,21 @@ export async function installCommand(source, options) {
   for (const skillResult of result.results) {
     if (skillResult.security) {
       const { formatSecurityReport } = await import('../utils/security.js')
-      console.log(
-        formatSecurityReport(
-          skillResult.security,
-          skillResult.name || skillResult.slug,
-        ),
+      const report = formatSecurityReport(
+        skillResult.security,
+        sanitizeForLog(skillResult.name || skillResult.slug),
       )
+      for (const line of report.split('\n')) console.log(sanitizeForLog(line))
     }
   }
 
   for (const mcp of result.mcpResults) {
-    console.log(`\n  MCP server "${mcp.server}" from ${mcp.source}:`)
+    console.log(
+      `\n  MCP server "${sanitizeForLog(mcp.server)}" from ${sanitizeForLog(mcp.source)}:`,
+    )
     for (const inst of mcp.installed) {
       if (inst.success) {
-        console.log(`    ✅ ${inst.agent}: installed`)
+        console.log(`    ✅ ${sanitizeForLog(inst.agent)}: installed`)
       }
     }
   }
