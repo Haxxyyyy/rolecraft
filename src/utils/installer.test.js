@@ -8,12 +8,18 @@ import {
   readFileSync,
   readlinkSync,
   lstatSync,
+  statSync,
 } from 'node:fs'
 import { mkdir, rm, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 let tempDir, installerModule, resolvedSkill, origHome
+
+function assertPrivateFile(path) {
+  if (process.platform === 'win32') return
+  assert.equal(statSync(path).mode & 0o777, 0o600)
+}
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'rolecraft-install-test-'))
@@ -1636,6 +1642,7 @@ describe('installer', () => {
       const entries = await readdir(backupDir)
       assert.equal(entries.length, 1)
       assert.ok(entries[0].endsWith('.json'))
+      assertPrivateFile(join(backupDir, entries[0]))
     })
 
     it('listBackups returns backups newest-first', async () => {
