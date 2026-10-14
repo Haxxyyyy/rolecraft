@@ -11,6 +11,7 @@ import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { EventEmitter } from 'node:events'
+import { createHash } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { execSync, spawnSync } from 'node:child_process'
 
@@ -621,7 +622,7 @@ Content
   describe('resolveNpm', () => {
     let origFetch
 
-    function mockHttps(resolver) {
+    function mockHttps(resolver, integrity = null) {
       resolver.setHttpsGet((...args) => {
         const cb = args[args.length - 1]
         const req = new EventEmitter()
@@ -643,6 +644,7 @@ Content
                   dist: {
                     tarball:
                       'https://registry.npmjs.org/test-pkg/-/test-pkg-1.0.0.tgz',
+                    ...(integrity ? { integrity } : {}),
                   },
                 },
               },
@@ -770,6 +772,51 @@ Content
         assert.equal(result.name, 'scoped-skill')
         assert.equal(result.sourceType, 'npm')
       })
+    })
+
+    it('verifies npm tarball integrity before extraction', async () => {
+      await freshImport()
+      const bytes = Buffer.from('fake-tarball')
+      const integrity =
+        'sha512-' + createHash('sha512').update(bytes).digest('base64')
+      mockHttps(resolverModule, integrity)
+      let extracted = false
+      resolverModule.setSpawnSync((cmd, args) => {
+        if (cmd === 'tar' && args[0] === '-xzf') {
+          extracted = true
+          const packageDir = join(args[3], 'package')
+          mkdirSync(packageDir, { recursive: true })
+          writeFileSync(join(packageDir, 'SKILL.md'), '---\nname: npm-skill\n---\nContent')
+        }
+        return { status: 0, stdout: '', stderr: '' }
+      })
+
+      await withMockFetch(async () => {
+        const result = await resolverModule.resolveSource('npm:test-pkg')
+        assert.equal(result.sourceType, 'npm')
+      })
+      assert.equal(extracted, true)
+    })
+
+    it('rejects a tarball whose bytes do not match registry integrity', async () => {
+      await freshImport()
+      mockHttps(
+        resolverModule,
+        'sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+      )
+      let tarInvoked = false
+      resolverModule.setSpawnSync((cmd) => {
+        if (cmd === 'tar') tarInvoked = true
+        return { status: 0, stdout: '', stderr: '' }
+      })
+
+      await withMockFetch(async () => {
+        await assert.rejects(
+          () => resolverModule.resolveSource('npm:test-pkg'),
+          (error) => error.userCode === 'NPM_TARBALL_INTEGRITY_MISMATCH',
+        )
+      })
+      assert.equal(tarInvoked, false)
     })
 
     it('throws when no SKILL.md found in npm package', async () => {
@@ -920,6 +967,40 @@ Content
       )
     })
 
+    it('destroys metadata streams when the response exceeds the byte cap', async () => {
+      await freshImport()
+      let responseDestroyed = false
+      let requestDestroyed = false
+      resolverModule.setHttpsGet((_url, _opts, cb) => {
+        const req = new EventEmitter()
+        req.destroy = () => {
+          requestDestroyed = true
+        }
+        process.nextTick(() => {
+          const res = new EventEmitter()
+          res.statusCode = 200
+          res.headers = {}
+          res.destroy = () => {
+            responseDestroyed = true
+          }
+          cb(res)
+          res.emit('data', Buffer.alloc(2_000_001))
+        })
+        return req
+      })
+
+      await assert.rejects(
+        () => resolverModule.resolveSource('npm:test-pkg'),
+        (error) => {
+          assert.equal(error.userCode, 'NPM_FETCH_FAILED')
+          assert.match(error.detail, /NPM_FETCH_TOO_LARGE|exceeded 2000000 bytes/)
+          return true
+        },
+      )
+      assert.equal(responseDestroyed, true)
+      assert.equal(requestDestroyed, true)
+    })
+
     it('throws when npm registry returns non-200', async () => {
       await freshImport()
       resolverModule.setHttpsGet((...args) => {
@@ -939,6 +1020,65 @@ Content
         () => resolverModule.resolveSource('npm:test-pkg'),
         /Could not fetch npm package/,
       )
+    })
+
+    it('rejects a tarball whose content-length exceeds the byte cap before writing', async () => {
+      await freshImport()
+      mockHttps(resolverModule)
+      let extracted = false
+      resolverModule.setSpawnSync((cmd) => {
+        if (cmd === 'tar') extracted = true
+        return { status: 0, stdout: '', stderr: '' }
+      })
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-length': String(50 * 1024 * 1024 + 1) }),
+        body: Readable.toWeb(Readable.from([Buffer.from('unused')])),
+      })
+      try {
+        await assert.rejects(
+          () => resolverModule.resolveSource('npm:test-pkg'),
+          (error) => error.userCode === 'NPM_TARBALL_TOO_LARGE',
+        )
+        assert.equal(extracted, false)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
+
+    it('rejects a tarball stream that exceeds the byte cap without a length header', async () => {
+      await freshImport()
+      mockHttps(resolverModule)
+      let extracted = false
+      resolverModule.setSpawnSync((cmd) => {
+        if (cmd === 'tar') extracted = true
+        return { status: 0, stdout: '', stderr: '' }
+      })
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: Readable.toWeb(
+          Readable.from(
+            (async function* () {
+              const chunk = Buffer.alloc(1024 * 1024)
+              for (let i = 0; i < 51; i++) yield chunk
+            })(),
+          ),
+        ),
+      })
+      try {
+        await assert.rejects(
+          () => resolverModule.resolveSource('npm:test-pkg'),
+          (error) => error.userCode === 'NPM_TARBALL_TOO_LARGE',
+        )
+        assert.equal(extracted, false)
+      } finally {
+        globalThis.fetch = originalFetch
+      }
     })
 
     it('throws when tarball download returns non-200', async () => {
