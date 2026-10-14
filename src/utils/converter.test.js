@@ -34,6 +34,32 @@ describe('parseFrontmatter', () => {
     })
   })
 
+  it('ignores __proto__ frontmatter and its nested array items', () => {
+    const content = [
+      '---',
+      '__proto__:',
+      '  - isAdmin: true',
+      '---',
+      'Body',
+    ].join('\n')
+
+    const { attrs } = parseFrontmatter(content)
+
+    assert.equal(Object.hasOwn(attrs, '__proto__'), false)
+    assert.equal(attrs.isAdmin, undefined)
+  })
+
+  it('keeps constructor and prototype as ordinary frontmatter keys', () => {
+    const { attrs } = parseFrontmatter(
+      '---\nconstructor: safe\nprototype: value\n---\nBody',
+    )
+
+    assert.equal(Object.hasOwn(attrs, 'constructor'), true)
+    assert.equal(Object.hasOwn(attrs, 'prototype'), true)
+    assert.equal(attrs.constructor, 'safe')
+    assert.equal(attrs.prototype, 'value')
+  })
+
   it('returns unchanged content when frontmatter is missing', () => {
     const content = '# Plain markdown\n\nNo metadata.'
 
