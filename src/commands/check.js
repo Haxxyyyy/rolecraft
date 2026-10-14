@@ -19,7 +19,11 @@ export async function checkCommand() {
   const rows = []
   for (const s of skills) {
     if (s.status === 'skipped') {
-      rows.push([sanitizeForLog(s.slug), `${ICONS.skip} skipped`, sanitizeForLog(s.reason)])
+      rows.push([
+        sanitizeForLog(s.slug),
+        `${ICONS.skip} skipped`,
+        sanitizeForLog(s.reason),
+      ])
     } else if (s.status === 'unsafe_update') {
       rows.push([
         sanitizeForLog(s.slug),
@@ -32,7 +36,11 @@ export async function checkCommand() {
     } else if (s.status === 'up_to_date') {
       rows.push([sanitizeForLog(s.slug), `${ICONS.ok} up to date`, '-'])
     } else if (s.status === 'error') {
-      rows.push([sanitizeForLog(s.slug), `${ICONS.error} error`, sanitizeForLog(s.reason)])
+      rows.push([
+        sanitizeForLog(s.slug),
+        `${ICONS.error} error`,
+        sanitizeForLog(s.reason),
+      ])
     }
   }
   for (const line of renderTable(['SKILL', 'STATUS', 'DETAIL'], rows)) {
@@ -46,7 +54,9 @@ export async function checkCommand() {
     )
     for (const s of skills) {
       if (s.status !== 'unsafe_update') continue
-      console.error(`\n   ${sanitizeForLog(s.slug)} (${sanitizeForLog(s.source)})`)
+      console.error(
+        `\n   ${sanitizeForLog(s.slug)} (${sanitizeForLog(s.source)})`,
+      )
       console.error(`   ${sanitizeForLog(s.reason)}`)
     }
     console.error(

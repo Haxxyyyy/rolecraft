@@ -18,17 +18,29 @@ export async function verifyCommand(frozen) {
   }
   for (const f of result.failed) {
     if (f.reason === 'directory not found') {
-      console.error(`   ❌ ${sanitizeForLog(f.slug)}: skill directory not found`)
+      console.error(
+        `   ❌ ${sanitizeForLog(f.slug)}: skill directory not found`,
+      )
     } else if (f.reason === 'missing source in lockfile') {
-      console.error(`   ❌ ${sanitizeForLog(f.slug)}: missing source in lockfile`)
+      console.error(
+        `   ❌ ${sanitizeForLog(f.slug)}: missing source in lockfile`,
+      )
     } else if (f.dirs) {
       for (const d of f.dirs) {
         const changes =
-          d.changes?.length > 0 ? ` (${sanitizeForLog(d.changes.join(', '))})` : ''
-        console.error(`   ❌ ${sanitizeForLog(f.slug)}: hash mismatch in ${sanitizeForLog(d.dir)}${sanitizeForLog(changes)}`)
+          d.changes?.length > 0
+            ? ` (${sanitizeForLog(d.changes.join(', '))})`
+            : ''
+        // Already sanitized above; sanitizing again would re-apply the 200-char cap
+        // and leave the parenthesis unbalanced.
+        console.error(
+          `   ❌ ${sanitizeForLog(f.slug)}: hash mismatch in ${sanitizeForLog(d.dir)}${changes}`,
+        )
       }
     } else {
-      console.error(`   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`)
+      console.error(
+        `   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`,
+      )
     }
   }
 

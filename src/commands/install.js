@@ -1,7 +1,12 @@
 import { apiInstallSkills } from '../api/install.js'
 import agents from '../agents.js'
 import { createProgressBar } from '../utils/spinner.js'
-import { ICONS, askQuestion, renderTable, sanitizeForLog } from '../utils/tui.js'
+import {
+  ICONS,
+  askQuestion,
+  renderTable,
+  sanitizeForLog,
+} from '../utils/tui.js'
 
 export { setCreateInterface } from '../utils/tui.js'
 
@@ -152,7 +157,9 @@ export async function installCommand(source, options) {
     const mode = options.symlink ? 'symlink' : 'copy'
     console.log(`\n[dry-run] Would install ${result.skills.length} skill(s):\n`)
     for (const skill of result.skills) {
-      console.log(`   Skill:     ${sanitizeForLog(skill.name)} (${sanitizeForLog(skill.slug)})`)
+      console.log(
+        `   Skill:     ${sanitizeForLog(skill.name)} (${sanitizeForLog(skill.slug)})`,
+      )
       console.log(`   Source:    ${sanitizeForLog(source)}`)
       console.log(`   Mode:      ${mode}`)
       console.log(`   Files:     ${sanitizeForLog(skill.files.join(', '))}`)
@@ -202,7 +209,9 @@ export async function installCommand(source, options) {
   }
 
   for (const mcp of result.mcpResults) {
-    console.log(`\n  MCP server "${sanitizeForLog(mcp.server)}" from ${sanitizeForLog(mcp.source)}:`)
+    console.log(
+      `\n  MCP server "${sanitizeForLog(mcp.server)}" from ${sanitizeForLog(mcp.source)}:`,
+    )
     for (const inst of mcp.installed) {
       if (inst.success) {
         console.log(`    ✅ ${sanitizeForLog(inst.agent)}: installed`)

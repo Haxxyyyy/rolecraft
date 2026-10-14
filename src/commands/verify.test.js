@@ -227,8 +227,16 @@ describe('verify command', () => {
     }
 
     const output = errors.join('\n')
-    assert.doesNotMatch(output, /\u001b/)
-    assert.ok(output.includes('blocked [32m✅ forged[0m: skill directory not found'))
+    // No escape byte may survive into stderr. Built with `String.fromCharCode`
+    // for the same reason as the sanitizer itself: a literal control character
+    // in a pattern trips `noControlCharactersInRegex`.
+    assert.doesNotMatch(output, new RegExp(String.fromCharCode(27), 'g'))
+    // `\n` and the first `\u001b` are adjacent, so the `+` in the control-character
+    // run collapses them into a single space; the second `\u001b` stands alone
+    // and becomes a space of its own.
+    assert.ok(
+      output.includes('blocked [32m✅ forged [0m: skill directory not found'),
+    )
     assert.equal(output.split('forged').length - 1, 1)
   })
 

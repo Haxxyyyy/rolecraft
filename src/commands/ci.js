@@ -19,7 +19,9 @@ export async function ciCommand() {
       console.log(`   ✅ ${sanitizeForLog(inst.slug)} installed`)
     }
     for (const f of result.failed) {
-      console.error(`   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`)
+      console.error(
+        `   ❌ ${sanitizeForLog(f.slug)}: ${sanitizeForLog(f.reason)}`,
+      )
     }
     console.log()
   }
@@ -36,7 +38,9 @@ export async function ciCommand() {
       )
     }
     for (const f of result.mcpFailed) {
-      console.error(`   ❌ ${sanitizeForLog(f.name)}: ${sanitizeForLog(f.reason)}`)
+      console.error(
+        `   ❌ ${sanitizeForLog(f.name)}: ${sanitizeForLog(f.reason)}`,
+      )
     }
     console.log()
   }
