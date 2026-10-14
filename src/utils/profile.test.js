@@ -811,6 +811,33 @@ describe('profile apply', () => {
       assert.equal(written.model, 'gpt-4o')
     })
 
+    it('writes the agent config owner-only so a captured MCP key is not exposed', async () => {
+      // An agent config carries MCP server definitions, and those carry `env`
+      // blocks with real API keys. Gating the `mcp` key stops an untrusted
+      // profile from *introducing* one; writing 0600 stops an existing one from
+      // being read by every local user. Both halves are needed.
+      const configData = {
+        global: {
+          mcp: {
+            github: {
+              type: 'local',
+              command: ['npx', '-y', '@mcp/github'],
+              env: { GITHUB_TOKEN: 'ghp_test_token' },
+            },
+          },
+        },
+      }
+
+      const result = await applyModule.applyAgentConfig('agents', configData)
+
+      const target = result[0].path
+      if (process.platform !== 'win32') {
+        assert.equal(statSync(target).mode & 0o777, 0o600)
+      }
+      // Sanity: the key really is in the file, so the mode is what protects it.
+      assert.match(await readFile(target, 'utf-8'), /ghp_test_token/)
+    })
+
     it('drops permission and plugin from a profile config', async () => {
       const configData = {
         global: {

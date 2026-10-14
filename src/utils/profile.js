@@ -22,6 +22,15 @@ const PROFILE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 
 export const PROFILE_SCHEMA_VERSION = 1
 
+// An agent config can carry MCP server definitions, and those carry `env`
+// blocks with real API keys — which is why `filterConfigMcpServers` gates the
+// `mcp` / `mcpServers` / `servers` keys above. Writing the file owner-only is
+// the other half of that: gating the content and then leaving it world-readable
+// would hand back everything the gate protects.
+//
+// Mirrors `MCP_CONFIG_MODE` in utils/mcp.js.
+const AGENT_CONFIG_MODE = 0o600
+
 const AGENT_CONFIG_PATHS = {
   agents: {
     global: () => join(homedir(), '.opencode.json'),
@@ -681,7 +690,7 @@ export async function applyAgentConfig(agentFlag, configData, options = {}) {
       applyConflictDecisions(merged, conflicts, decisions)
     }
 
-    await writeJsonAtomic(targetPath, merged)
+    await writeJsonAtomic(targetPath, merged, { mode: AGENT_CONFIG_MODE })
     // `previous` is the rollback material for applyProfileData; it is stripped
     // from the returned results once the apply succeeds.
     results.push({ scope, path: targetPath, blocked, previous })
@@ -802,7 +811,7 @@ export async function applyInstructions(agentFlag, instructions) {
         }
       }
       config.instructions = filePaths
-      await writeJsonAtomic(targetPath, config)
+      await writeJsonAtomic(targetPath, config, { mode: AGENT_CONFIG_MODE })
       applied.push({ scope, path: targetPath })
     }
 
@@ -908,7 +917,11 @@ async function rollbackConfigs(written, originalError) {
   for (const { path, previous } of written.reverse()) {
     try {
       if (previous === null) await rm(path, { force: true })
-      else await writeFile(path, previous, 'utf-8')
+      else
+        await writeFile(path, previous, {
+          encoding: 'utf-8',
+          mode: AGENT_CONFIG_MODE,
+        })
     } catch (err) {
       originalError.rollbackErrors ??= []
       originalError.rollbackErrors.push(`${path}: ${err.message}`)
