@@ -216,7 +216,7 @@ export async function writeProfile(data) {
   if (data.description) enriched.description = data.description
 
   await ensureProfileDir()
-  await writeJsonAtomic(profilePath(data.name), enriched)
+  await writeJsonAtomic(profilePath(data.name), enriched, { mode: 0o600 })
   return enriched
 }
 
@@ -437,7 +437,7 @@ export async function createBackup(agentFlag) {
     if (content !== null) {
       const backupName = `${agentFlag}-${scope}-${timestamp}.bak`
       const backupPath = join(backupsDir, backupName)
-      await writeFile(backupPath, content, 'utf-8')
+      await writeFile(backupPath, content, { encoding: 'utf-8', mode: 0o600 })
       results.push({ scope, path: backupPath })
     }
   }

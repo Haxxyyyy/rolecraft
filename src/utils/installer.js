@@ -84,7 +84,10 @@ export async function backupSkill(slug, fileContents) {
 
   const backupFile = join(backupDir, `${timestamp}.json`)
 
-  await writeFile(backupFile, JSON.stringify(fileContents, null, 2), 'utf-8')
+  await writeFile(backupFile, JSON.stringify(fileContents, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  })
 
   return timestamp
 }

@@ -1,6 +1,6 @@
 import { describe, it, before, after, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, existsSync } from 'node:fs'
+import { mkdtempSync, existsSync, statSync } from 'node:fs'
 import { mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -227,6 +227,10 @@ describe('profile utils', () => {
   describe('writeProfile and readProfile', () => {
     it('writes and reads a profile', async () => {
       const written = await profileModule.writeProfile(VALID_PROFILE)
+      assert.equal(
+        statSync(profileModule.profilePath('test-profile')).mode & 0o777,
+        0o600,
+      )
       assert.equal(written.name, 'test-profile')
       assert.equal(written.version, 1)
       assert.ok(written.createdAt)
@@ -781,6 +785,7 @@ describe('profile apply', () => {
       assert.equal(result.length, 1)
       assert.equal(result[0].scope, 'global')
       assert.ok(result[0].path.includes('.bak'))
+      assert.equal(statSync(result[0].path).mode & 0o777, 0o600)
     })
 
     it('returns null when no config exists', async () => {

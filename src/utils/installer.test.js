@@ -8,6 +8,7 @@ import {
   readFileSync,
   readlinkSync,
   lstatSync,
+  statSync,
 } from 'node:fs'
 import { mkdir, rm, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -1636,6 +1637,7 @@ describe('installer', () => {
       const entries = await readdir(backupDir)
       assert.equal(entries.length, 1)
       assert.ok(entries[0].endsWith('.json'))
+      assert.equal(statSync(join(backupDir, entries[0])).mode & 0o777, 0o600)
     })
 
     it('listBackups returns backups newest-first', async () => {
